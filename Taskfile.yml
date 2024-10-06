@@ -1,0 +1,206 @@
+version: '3'
+
+tasks:
+
+  default:
+    desc: ℹ️  Welcome to Lambda Authenticator Taskfile!
+    silent: true
+    cmds:
+      - |
+        echo Lambda Authenticator
+      - echo 'OS={{OS}} ARCH={{ARCH}}'
+      - echo
+      - task --list
+
+  init:
+    desc: Initialize Terraform
+    silent: true
+    dir: terraform
+    cmds:
+      - terraform init
+
+  switch_backend:
+    dir: terraform
+    silent: true
+    cmds:
+      - |
+        read -p "Enter AWS Region: " region
+        if [ -z "$region" ]; then
+          echo "AWS Region is required."
+          exit 1
+        fi
+
+        # Backup original .conf file
+        cp envs/prod/backend.prod.conf prod.conf.bak
+
+        # Detect OS and apply correct `sed` command
+        if [[ {{OS}} == "darwin"* ]]; then
+          sed -i '' "s/^region *=.*/region = \"$region\"/" envs/prod/backend.prod.conf
+          sed -i '' 's/backend "local"/backend "s3"/' backend.tf
+        else
+          sed -i 's/backend "local"/backend "s3"/' backend.tf
+          sed -i "s/^region *=.*/region = \"$region\"/" envs/prod/backend.prod.conf
+        fi
+
+        echo "Switching to remote backend..."
+        terraform init -backend-config=envs/prod/backend.prod.conf -reconfigure
+        echo "Switched to remote backend."
+
+        # Restore the original conf file after backend switch
+        mv prod.conf.bak envs/prod/backend.prod.conf
+
+  plan:
+    desc: Plan Terraform configuration
+    silent: true
+    dir: terraform
+    cmds:
+      - |
+        read -p "Enter AWS Account ID: " account_id
+        if [ -z "$account_id" ]; then
+          echo "AWS Account ID is required."
+          exit 1
+        fi
+
+        read -p "Enter AWS Region: " region
+        if [ -z "$region" ]; then
+          echo "AWS Region is required."
+          exit 1
+        fi
+
+        # Backup original .tfvars and .conf files
+        cp envs/prod/prod.tfvars prod.tfvars.bak
+        cp envs/prod/backend.prod.conf prod.conf.bak
+
+        # Detect OS and apply correct `sed` command
+        if [[ {{OS}} == "darwin"* ]]; then
+          sed -i '' "s/^account_id *=.*/account_id = \"$account_id\"/" envs/prod/prod.tfvars
+          sed -i '' "s/^region *=.*/region = \"$region\"/" envs/prod/prod.tfvars
+          sed -i '' "s/^region *=.*/region = \"$region\"/" envs/prod/backend.prod.conf
+        else
+          sed -i "s/^account_id *=.*/account_id = \"$account_id\"/" envs/prod/prod.tfvars
+          sed -i "s/^region *=.*/region = \"$region\"/" envs/prod/prod.tfvars
+          sed -i "s/^region *=.*/region = \"$region\"/" envs/prod/backend.prod.conf
+        fi
+
+        echo "Running Terraform plan..."
+        terraform plan -var-file="envs/prod/prod.tfvars"
+
+      - |
+        # Restore the original .tfvars and .conf files after plan
+        mv prod.tfvars.bak envs/prod/prod.tfvars
+        mv prod.conf.bak envs/prod/backend.prod.conf
+
+  deploy:
+    desc: Apply Terraform configuration
+    silent: true
+    dir: terraform
+    cmds:
+      - |
+        read -p "Enter AWS Account ID: " account_id
+        if [ -z "$account_id" ]; then
+          echo "AWS Account ID is required."
+          exit 1
+        fi
+
+        read -p "Enter AWS Region: " region
+        if [ -z "$region" ]; then
+          echo "AWS Region is required."
+          exit 1
+        fi
+
+        # Backup original .tfvars and .conf files
+        cp envs/prod/prod.tfvars prod.tfvars.bak
+        cp envs/prod/backend.prod.conf prod.conf.bak
+
+        # Detect OS and apply correct `sed` command
+        if [[ {{OS}} == "darwin"* ]]; then
+          sed -i '' "s/^account_id *=.*/account_id = \"$account_id\"/" envs/prod/prod.tfvars
+          sed -i '' "s/^region *=.*/region = \"$region\"/" envs/prod/prod.tfvars
+          sed -i '' "s/^region *=.*/region = \"$region\"/" envs/prod/backend.prod.conf
+        else
+          sed -i "s/^account_id *=.*/account_id = \"$account_id\"/" envs/prod/prod.tfvars
+          sed -i "s/^region *=.*/region = \"$region\"/" envs/prod/prod.tfvars
+          sed -i "s/^region *=.*/region = \"$region\"/" envs/prod/backend.prod.conf
+        fi
+
+        echo "Running Terraform apply..."
+        terraform apply -var-file="envs/prod/prod.tfvars" --auto-approve
+
+      - |
+        # Restore the original .tfvars and .conf files after plan
+        mv prod.tfvars.bak envs/prod/prod.tfvars
+        mv prod.conf.bak envs/prod/backend.prod.conf
+
+  create_user:
+    desc: Create a record of test user in DynamoDB
+    silent: true
+    dir: src/lambda_authenticator/tests
+    cmds:
+      - |
+        read -p "Enter username: " username
+        if [ -z "$username" ]; then
+          echo "Username is required."
+          exit 1
+        fi
+
+        stty -echo
+        read -p "Enter password: " password
+        stty echo
+        echo
+
+        if [ -z "$password" ]; then
+          echo "Password is required."
+          exit 1
+        fi
+
+        echo "Activating venv"
+        source venv/bin/activate
+
+        echo "Hashing password..."
+        hashed_password=$(python3 -c "import bcrypt; print(bcrypt.hashpw('$password'.encode('utf-8'), bcrypt.gensalt()).decode())")
+
+        echo "Populating DynamoDB with provided username and hashed password..."
+        aws dynamodb put-item \
+          --table-name "prod-authenticator-user-credentials" \
+          --item "{
+            \"username\": {\"S\": \"$username\"},
+            \"password_hash\": {\"S\": \"$hashed_password\"}
+          }"
+
+  run:
+    desc: Invoke Authenticator Lambda
+    silent: true
+    cmds:
+      - |
+        read -p "Enter API Gateway endpoint (press Enter to use the stored value from Terraform): " api_gateway_input
+        if [ -z "$api_gateway_input" ]; then
+          api_gateway_input=${API_ENDPOINT}
+        fi
+        if [ -z "$api_gateway_input" ]; then
+          echo "API Gateway endpoint is not provided. Please either deploy first or provide a value."
+          exit 1
+        fi
+        read -p "Enter username: " username
+
+        stty -echo
+        read -p "Enter password: " password
+        stty echo
+        echo
+        auth=$(echo -n "$username:$password" | base64)
+        echo "Making API call..."
+        curl -X POST "$api_gateway_input/auth" -H "Authorization: Basic $auth"
+
+  setup_venv:
+    desc: Create a virtual environment and install dependencies
+    silent: true
+    dir: src/lambda_authenticator/tests
+    cmds:
+      - python3 -m venv venv
+      - source venv/bin/activate && pip install -r requirements.txt
+
+  local_test:
+    desc: Run tests with pytest
+    silent: true
+    dir: src/lambda_authenticator/tests
+    cmds:
+      - source venv/bin/activate && pytest authenticator_lambda_test.py

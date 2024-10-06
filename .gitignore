@@ -1,0 +1,8 @@
+venv
+.python-version
+terraform.tfstate*
+.terraform*
+lambda_handler.zip
+__pycache__
+.pytest*
+*.DS_Store*

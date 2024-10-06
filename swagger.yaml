@@ -1,0 +1,67 @@
+openapi: 3.0.0
+info:
+  title: Authentication API
+  description: API for authenticating users with Basic Authentication.
+  version: 1.0.0
+
+servers:
+  - url: https://{api_id}.execute-api.{region}.amazonaws.com/prod
+    variables:
+      api_id:
+        default: "your_api_id"  # Replace with your actual API ID after deployment
+      region:
+        default: "your_region"   # Replace with your actual AWS region
+
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+
+security:
+  - basicAuth: []
+
+paths:
+  /auth:
+    post:
+      summary: Authenticate user
+      description: Authenticates a user using Basic Authentication.
+      operationId: authenticateUser
+      security:
+        - basicAuth: []
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                type: string
+                example: "Authentication successful"
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: string
+                example: "Username and password cannot be empty"
+        '401':
+          description: Missing or invalid Authorization header
+          content:
+            application/json:
+              schema:
+                type: string
+                example: "Missing or invalid Authorization header"
+        '403':
+          description: Invalid username or password
+          content:
+            application/json:
+              schema:
+                type: string
+                example: "Invalid username or password"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: string
+                example: "Internal server error: {error_message}"
