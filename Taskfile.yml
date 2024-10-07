@@ -153,8 +153,14 @@ tasks:
           exit 1
         fi
 
-        echo "Activating venv"
-        source venv/bin/activate
+        # Detect OS and apply correct `source` command
+        if [[ {{OS}} == "darwin"* ]]; then
+          echo "Activating venv"
+          source venv/bin/activate
+        else
+          echo "Activating venv"
+          bash -c "source venv/bin/activate"
+        fi
 
         echo "Hashing password..."
         hashed_password=$(python3 -c "import bcrypt; print(bcrypt.hashpw('$password'.encode('utf-8'), bcrypt.gensalt()).decode())")
@@ -195,12 +201,25 @@ tasks:
     silent: true
     dir: src/lambda_authenticator/tests
     cmds:
-      - python3 -m venv venv
-      - source venv/bin/activate && pip install -r requirements.txt
+      - |
+        python3 -m venv venv
+
+        # Detect OS and apply correct commands
+        if [[ {{OS}} == "darwin"* ]]; then
+          source venv/bin/activate && pip install -r requirements.txt
+        else
+          bash -c "source venv/bin/activate && pip install -r requirements.txt"
+        fi
 
   local_test:
     desc: Run tests with pytest
     silent: true
     dir: src/lambda_authenticator/tests
     cmds:
-      - source venv/bin/activate && pytest authenticator_lambda_test.py
+      - |
+        # Detect OS and apply correct commands
+        if [[ {{OS}} == "darwin"* ]]; then
+          source venv/bin/activate && pytest authenticator_lambda_test.py
+        else
+          bash -c "source venv/bin/activate && pytest authenticator_lambda_test.py"
+        fi

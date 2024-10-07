@@ -6,3 +6,4 @@ lambda_handler.zip
 __pycache__
 .pytest*
 *.DS_Store*
+*bak

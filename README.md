@@ -68,7 +68,7 @@ task switch_backend
 This command will configure the remote backend to pre-deployed S3 bucket. State lock will be configured in pre-deployed DynamoDB table. Once complete, your Terraform state will be stored remotely.
 
 ### Setting up the virtual environment
-In order to run Authenticator Lambda locally you have to create virtual environment first. Do it using following command:
+In order to create test users and run Authenticator Lambda locally you have to create virtual environment first. Do it using following command:
 
 ```bash
 task setup_venv
